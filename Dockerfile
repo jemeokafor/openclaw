@@ -34,15 +34,11 @@ ENV NODE_ENV=production
 # Allow non-root user to write temp files during runtime/tests.
 RUN chown -R node:node /app
 
-# Security hardening: Run as non-root user
-# The node:22-bookworm image includes a 'node' user (uid 1000)
-# This reduces the attack surface by preventing container escape via root privileges
-USER node
+# Keep root at runtime so mounted volumes (e.g. Railway /data) are writable.
+# Non-root containers often cannot write fresh volume mounts without an init chown step.
 
-# Start gateway server with default config.
-# Binds to loopback (127.0.0.1) by default for security.
-#
-# For container platforms requiring external health checks:
-#   1. Set OPENCLAW_GATEWAY_TOKEN or OPENCLAW_GATEWAY_PASSWORD env var
-#   2. Override CMD: ["node","openclaw.mjs","gateway","--allow-unconfigured","--bind","lan"]
-CMD ["node", "openclaw.mjs", "gateway", "--allow-unconfigured"]
+# Start gateway with Railway-friendly defaults.
+# - bind: lan (0.0.0.0)
+# - port: PORT env (defaults to 8080)
+# - state/workspace: /data paths when not explicitly provided
+CMD ["bash", "-lc", "set -euo pipefail; export OPENCLAW_STATE_DIR=\"${OPENCLAW_STATE_DIR:-/data/.openclaw}\"; export OPENCLAW_WORKSPACE_DIR=\"${OPENCLAW_WORKSPACE_DIR:-/data/workspace}\"; export PORT=\"${PORT:-8080}\"; mkdir -p \"$OPENCLAW_STATE_DIR\" \"$OPENCLAW_WORKSPACE_DIR\"; if [ -z \"${OPENCLAW_GATEWAY_TOKEN:-}\" ] && [ -z \"${OPENCLAW_GATEWAY_PASSWORD:-}\" ]; then echo \"ERROR: set OPENCLAW_GATEWAY_TOKEN or OPENCLAW_GATEWAY_PASSWORD for --bind lan\" >&2; exit 1; fi; exec node openclaw.mjs gateway --allow-unconfigured --bind lan --port \"$PORT\""]
